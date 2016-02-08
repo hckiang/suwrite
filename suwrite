@@ -1,0 +1,75 @@
+#!/bin/sh
+exec sudo guile -s "$0" "$@"
+!#
+
+(use-modules (ice-9 getopt-long))
+
+(define option-spec
+  '((help (single-char #\h) (value #f))
+    (append (single-char #\a) (value #f))
+    (force (single-char #\f) (value #f))))
+
+(define options (getopt-long (command-line) option-spec))
+
+(define (start-append files)
+  (let ((ports (map (lambda (f) (open-file f "a"))
+                    files)))
+    (write-stdin-to-all ports)))
+
+(define (start-replace files)
+  (let ((ports (map (lambda (f) (open-file f "w"))
+                    files)))
+    (write-stdin-to-all ports)))
+    
+(define (write-stdin-to-all ports)
+  (let ((c (read-char)))
+    (if (eof-object? c)
+        (close-all-ports ports)
+        (begin (write-char-to-all ports c)
+               (write-stdin-to-all ports)))))
+
+(define (close-all-ports ports)
+  (if (null? ports)
+      #t
+      (begin (close-output-port (car ports))
+             (close-all-ports (cdr ports)))))
+
+(define (write-char-to-all ports char)
+  (if (null? ports)
+      #t
+      (begin (write-char char (car ports))
+             (write-char-to-all (cdr ports) char))))
+
+(define (display-help)
+  (display "Usage: suwrite <options> file1 file2 file3\n")
+  (display "Options:\n")
+  (display "\t-a, --append: Append to files instead of overwriting\n")
+  (display "\t-f, --force: Force overwriting existing files\n"))
+           
+
+(define (all-file-exist? files)
+  (if (null? files)
+      #t
+      (and
+       (file-exists? (car files))
+       (all-file-exist? (cdr files)))))
+
+;###################### MAIN ########################
+
+(if (option-ref options 'help #f)
+    (begin (display-help)
+           (exit 0))
+    #t)
+
+(if (and (not (option-ref options 'append #f))
+         (not (option-ref options 'force #f))
+         (all-file-exist? (option-ref options '() #f)))
+    (begin (display "Some of the file(s) exists. Use -f to overwrite it.\n")
+           (exit 1)))
+            
+(if (option-ref options 'append #f)
+    (start-append (option-ref options '() #f))
+    (start-replace (option-ref options '() #f)))
+
+
+
